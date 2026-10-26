@@ -1,0 +1,1402 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OrbitGuard 3D</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#050b19;color:#eef7ff;font:15px/1.6 Arial,sans-serif}
+header{text-align:center;padding:25px;background:#102a4d}
+h1{margin:0;color:#75e5ff}
+h2{color:#79dfff;margin-top:0}
+h3{color:#bcecff}
+main{max-width:1350px;margin:auto;padding:18px}
+section{background:#0e1d37;border:1px solid #29496d;border-radius:14px;padding:20px;margin-bottom:18px}
+button{background:#1688d9;color:white;border:0;border-radius:8px;padding:11px 14px;cursor:pointer;margin:4px}
+button:hover{background:#28a6fa}
+button:disabled{opacity:.5}
+select,input{background:#07152a;color:white;border:1px solid #5478a0;border-radius:7px;padding:10px;margin:4px;max-width:100%}
+.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid section{min-width:0}
+.panel{background:#07142b;border-radius:9px;padding:14px;margin-top:12px;overflow-wrap:anywhere}
+.panel p{margin:7px 0}
+#earth{height:550px;background:#010612;border-radius:12px;overflow:hidden;touch-action:none;margin-top:12px}
+#earth canvas{display:block}
+#satelliteSelect{width:100%}
+.muted,small{color:#abc5e3}
+.good{color:#79efac}
+.bad{color:#ff8494}
+.stat{background:#122b4b;padding:14px;border-radius:9px;flex:1;min-width:180px}
+.stat strong{font-size:23px;color:#89eaff}
+.quant-card{background:#102747;border:1px solid #35577c;border-radius:12px;padding:16px;margin:14px 0}
+.quant-formula{background:#06152c;padding:12px;border-radius:8px;font-size:17px;overflow-wrap:anywhere}
+.quant-result{font-size:20px;font-weight:bold}
+.quant-true{color:#79efac}
+.quant-false{color:#ff8494}
+.quant-example{border-left:3px solid #61d6ff;padding:9px 13px;background:#091b34}
+@media(max-width:750px){.grid{grid-template-columns:1fr}#earth{height:390px}}
+</style>
+
+<script type="importmap">
+{
+ "imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+ }
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+</head>
+
+<body>
+<header>
+<h1>🛰️ OrbitGuard 3D</h1>
+<p>Satellite Tracking • Earth Visualization • Mathematical Quantifiers</p>
+</header>
+
+<main>
+<section>
+<h2>Mission Control</h2>
+<div class="row">
+<button id="load">Refresh Satellite Records</button>
+<button id="sync">Sync Current Time</button>
+<button id="pause">Pause</button>
+<select id="speed">
+<option value="1">1× Current Time</option>
+<option value="60">60× Simulation</option>
+<option value="600">600× Simulation</option>
+</select>
+</div>
+<p id="status">Loading satellites...</p>
+<p id="clock">Time: —</p>
+<p id="mode" class="good">Current-time orbital prediction</p>
+<p id="dataAge" class="muted">Records: —</p>
+</section>
+
+<section>
+<h2>Interactive 3D Earth</h2>
+<p class="muted">Drag to rotate • Scroll to zoom • Click a satellite</p>
+<div class="row">
+<select id="viewMode">
+<option value="all">All Satellites + Selected Orbit</option>
+<option value="selected">Selected Satellite Only</option>
+<option value="dots">All Satellites Without Orbit</option>
+</select>
+<button id="toggleGrid">Show Coordinate Grid</button>
+<button id="toggleLabel">Hide Satellite Name</button>
+<button id="toggleConnection">Hide Station Connection</button>
+<button id="focus">Focus on Satellite</button>
+</div>
+<div id="earth"></div>
+<p class="muted">Cyan = selected satellite • Dim dots = other satellites • Cyan curve = predicted path • Green = ground station</p>
+</section>
+
+<div class="grid">
+<section>
+<h2>Selected Satellite</h2>
+<select id="satelliteSelect"></select>
+<div id="satelliteInfo" class="panel">Waiting for data...</div>
+</section>
+
+<section>
+<h2>Ground Station Visibility</h2>
+<select id="station">
+<option value="12.9716,77.5946">Bengaluru</option>
+<option value="17.3850,78.4867">Hyderabad</option>
+<option value="28.6139,77.2090">New Delhi</option>
+<option value="40.7128,-74.0060">New York</option>
+<option value="51.5074,-0.1278">London</option>
+</select>
+<button id="coverage">Check Visibility</button>
+<div id="coverageResults" class="panel">Waiting...</div>
+<h3>Next Predicted Satellite Passes</h3>
+<button id="predictPasses">Predict Next 24 Hours</button>
+<div id="nextPassResults" class="panel">Click to calculate upcoming passes.</div>
+</section>
+</div>
+
+<section>
+<h2>🧠 Quantifier Explanation Dashboard</h2>
+<p>Analyze real satellite positions using Universal, Existential, and Nested Quantifiers. The dashboard shows mathematical statements, proofs by example, and counterexamples.</p>
+
+<label>Distance threshold (km):
+<input id="threshold" type="number" min="1" value="1000">
+</label>
+<button id="analyze">Run Mathematical Analysis</button>
+
+<div class="row">
+<div class="stat">
+<small>Satellites analyzed</small>
+<br><strong id="quantifierCount">—</strong>
+</div>
+<div class="stat">
+<small>Distinct satellite pairs</small>
+<br><strong id="quantifierTotalPairs">—</strong>
+</div>
+<div class="stat">
+<small>Close satellite pairs</small>
+<br><strong id="quantifierPairs">—</strong>
+</div>
+</div>
+
+<div id="results" class="panel">
+Click Run Mathematical Analysis to begin.
+</div>
+</section>
+
+<section>
+<h2>☀️ Earth's Solar Energy Absorption</h2>
+<div class="row">
+<div class="stat">
+<small>Estimated global absorbed solar power</small>
+<br><strong id="globalPower">—</strong>
+</div>
+<div class="stat">
+<small>Average absorbed solar flux</small>
+<br><strong id="averageFlux">—</strong>
+</div>
+<div class="stat">
+<small>Subsolar coordinates</small>
+<br><strong id="subsolar">—</strong>
+</div>
+</div>
+<h3>Local Sunlight</h3>
+<select id="solarLocation">
+<option value="12.9716,77.5946">Bengaluru</option>
+<option value="17.3850,78.4867">Hyderabad</option>
+<option value="28.6139,77.2090">New Delhi</option>
+<option value="40.7128,-74.0060">New York</option>
+<option value="51.5074,-0.1278">London</option>
+</select>
+<button id="solarCheck">Calculate Local Sunlight</button>
+<div id="solarResults" class="panel">Calculating...</div>
+</section>
+
+<section>
+<h2>Solar Quantifier Analysis</h2>
+<label>Solar irradiance threshold (W/m²):
+<input id="solarThreshold" type="number" min="0" value="500">
+</label>
+<button id="solarAnalyze">Analyze Sunlight</button>
+<div id="solarQuantifiers" class="panel">Waiting for analysis...</div>
+</section>
+
+<section>
+<h2>Scientific Accuracy</h2>
+<p>Satellite positions are SGP4 predictions calculated from real CelesTrak orbital records, not direct live telemetry. Ground-station visibility is geometric, not measured signal strength. Satellite proximity does not establish collision probability.</p>
+<p>Solar results use simplified astronomical geometry, 1361 W/m² solar irradiance and 30% planetary reflectivity. They are not live measurements of Earth's heat absorption.</p>
+</section>
+</main>
+
+<script type="module">
+import * as THREE from "three";
+import {OrbitControls} from "three/addons/controls/OrbitControls.js";
+
+const $=id=>document.getElementById(id);
+const sat=window.satellite;
+const rad=d=>d*Math.PI/180;
+const deg=r=>r*180/Math.PI;
+const SCALE=3/6378.137;
+
+let satellites=[];
+let markers=[];
+let selected=0;
+let simulationTime=new Date();
+let speed=1,paused=false,loading=false;
+let fetchedAt=null;
+let lastFrame=performance.now();
+let lastUI=0,lastCoverage=0,lastPathTime=0;
+let passJob=0;
+let gridVisible=false,labelVisible=true,connectionVisible=true;
+let selectedPath=null,connectionLine=null;
+
+// =====================================
+// 3D EARTH
+// =====================================
+const host=$("earth");
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x020714);
+
+const camera=new THREE.PerspectiveCamera(
+ 55,host.clientWidth/host.clientHeight,.1,500
+);
+camera.position.set(0,4,14);
+
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(host.clientWidth,host.clientHeight);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+host.appendChild(renderer.domElement);
+
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;
+controls.minDistance=4.5;
+controls.maxDistance=35;
+
+const earthMaterial=new THREE.MeshPhongMaterial({
+ color:0x176b9d,shininess:8
+});
+scene.add(new THREE.Mesh(
+ new THREE.SphereGeometry(3,96,64),
+ earthMaterial
+));
+
+new THREE.TextureLoader().load(
+ "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg",
+ texture=>{
+  texture.colorSpace=THREE.SRGBColorSpace;
+  earthMaterial.map=texture;
+  earthMaterial.color.set(0xffffff);
+  earthMaterial.needsUpdate=true;
+ },
+ undefined,
+ error=>console.warn("Earth texture unavailable",error)
+);
+
+scene.add(new THREE.AmbientLight(0xffffff,.15));
+const sunlight=new THREE.DirectionalLight(0xffffff,2.6);
+scene.add(sunlight);
+
+function globePoint(lat,lon,r=3.03){
+ const a=rad(lat),b=rad(lon);
+ return new THREE.Vector3(
+  r*Math.cos(a)*Math.cos(b),
+  r*Math.sin(a),
+  -r*Math.cos(a)*Math.sin(b)
+ );
+}
+function toScene(p){
+ return new THREE.Vector3(p.x*SCALE,p.z*SCALE,-p.y*SCALE);
+}
+function line(points,color,opacity=.7){
+ const object=new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(points),
+  new THREE.LineBasicMaterial({color,transparent:true,opacity})
+ );
+ scene.add(object);
+ return object;
+}
+function removeLine(object){
+ if(!object)return;
+ scene.remove(object);
+ object.geometry.dispose();
+ object.material.dispose();
+}
+
+// =====================================
+// TEXT LABELS
+// =====================================
+function makeLabel(text,color="#eafaff"){
+ const canvas=document.createElement("canvas");
+ canvas.width=512;
+ canvas.height=90;
+ const ctx=canvas.getContext("2d");
+ ctx.fillStyle="rgba(3,12,29,.88)";
+ ctx.fillRect(0,0,512,90);
+ ctx.fillStyle=color;
+ ctx.font="bold 28px Arial";
+ ctx.textAlign="center";
+ ctx.fillText(text,256,58,495);
+ const texture=new THREE.CanvasTexture(canvas);
+ const sprite=new THREE.Sprite(
+  new THREE.SpriteMaterial({
+   map:texture,transparent:true,depthTest:false
+  })
+ );
+ sprite.scale.set(2.1,.38,1);
+ scene.add(sprite);
+ return sprite;
+}
+
+const satelliteLabel=makeLabel("Selected Satellite","#00ffff");
+let lastLabelName="";
+
+function setSatelliteLabel(name){
+ if(name===lastLabelName)return;
+ lastLabelName=name;
+
+ const replacement=makeLabel(name.slice(0,36),"#00ffff");
+ satelliteLabel.material.map.dispose();
+ satelliteLabel.material.map=replacement.material.map;
+ satelliteLabel.material.needsUpdate=true;
+
+ scene.remove(replacement);
+ replacement.material.dispose();
+}
+
+function updateSatelliteLabel(){
+ const marker=markers[selected];
+ satelliteLabel.visible=Boolean(
+  marker&&marker.visible&&labelVisible
+ );
+ if(marker&&marker.visible){
+  satelliteLabel.position.copy(marker.position);
+  satelliteLabel.position.y+=.38;
+ }
+}
+
+// =====================================
+// OPTIONAL COORDINATE GRID
+// =====================================
+const gridObjects=[];
+
+for(let lat=-60;lat<=60;lat+=30){
+ const points=[];
+ for(let lon=-180;lon<=180;lon+=3){
+  points.push(globePoint(lat,lon));
+ }
+ gridObjects.push(line(points,0x5bbdff,.3));
+ const label=makeLabel(
+  lat===0?"0°":Math.abs(lat)+"°"+(lat>0?"N":"S")
+ );
+ label.scale.set(.7,.26,1);
+ label.position.copy(globePoint(lat,0,3.25));
+ gridObjects.push(label);
+}
+for(let lon=-180;lon<180;lon+=30){
+ const points=[];
+ for(let lat=-90;lat<=90;lat+=3){
+  points.push(globePoint(lat,lon));
+ }
+ gridObjects.push(line(points,0x5bbdff,.3));
+ const label=makeLabel(
+  lon===0?"0°":Math.abs(lon)+"°"+(lon>0?"E":"W")
+ );
+ label.scale.set(.7,.26,1);
+ label.position.copy(globePoint(0,lon,3.25));
+ gridObjects.push(label);
+}
+gridObjects.forEach(o=>o.visible=false);
+
+$("toggleGrid").onclick=()=>{
+ gridVisible=!gridVisible;
+ gridObjects.forEach(o=>o.visible=gridVisible);
+ $("toggleGrid").textContent=gridVisible
+  ?"Hide Coordinate Grid":"Show Coordinate Grid";
+};
+
+// =====================================
+// STARS
+// =====================================
+const starPoints=[];
+for(let i=0;i<800;i++){
+ const a=Math.random()*Math.PI*2;
+ const z=Math.random()*2-1;
+ const r=90+Math.random()*80;
+ const t=Math.sqrt(1-z*z);
+ starPoints.push(r*t*Math.cos(a),r*z,r*t*Math.sin(a));
+}
+const starGeometry=new THREE.BufferGeometry();
+starGeometry.setAttribute(
+ "position",
+ new THREE.Float32BufferAttribute(starPoints,3)
+);
+scene.add(new THREE.Points(
+ starGeometry,
+ new THREE.PointsMaterial({color:0xffffff,size:.3})
+));
+
+// =====================================
+// SUN POSITION
+// =====================================
+const norm=x=>((x%360)+360)%360;
+
+function getSun(date){
+ const jd=date.getTime()/86400000+2440587.5;
+ const n=jd-2451545;
+ const L=norm(280.460+.9856474*n);
+ const g=rad(norm(357.528+.9856003*n));
+ const lambda=rad(L+1.915*Math.sin(g)+.020*Math.sin(2*g));
+ const epsilon=rad(23.439-.0000004*n);
+ const ra=Math.atan2(
+  Math.cos(epsilon)*Math.sin(lambda),
+  Math.cos(lambda)
+ );
+ const dec=Math.asin(
+  Math.sin(epsilon)*Math.sin(lambda)
+ );
+ const gmst=sat
+  ?sat.gstime(date)
+  :rad(norm(280.46061837+360.98564736629*n));
+ const lon=Math.atan2(
+  Math.sin(ra-gmst),Math.cos(ra-gmst)
+ );
+ return {lat:deg(dec),lon:deg(lon)};
+}
+function updateSun(){
+ const sun=getSun(simulationTime);
+ sunlight.position.copy(globePoint(sun.lat,sun.lon,20));
+}
+
+// =====================================
+// ORBITAL POSITION FUNCTIONS
+// =====================================
+function eciPosition(record,date){
+ if(!sat)return null;
+ const result=sat.propagate(record,date);
+ const p=result?.position;
+ if(!p||typeof p!=="object")return null;
+ if(![p.x,p.y,p.z].every(Number.isFinite))return null;
+ return p;
+}
+function fixedPosition(record,date){
+ const p=eciPosition(record,date);
+ if(!p)return null;
+ return sat.eciToEcf(p,sat.gstime(date));
+}
+function coordinates(record,date){
+ const p=eciPosition(record,date);
+ if(!p)return null;
+ const geo=sat.eciToGeodetic(p,sat.gstime(date));
+ return {
+  lat:sat.degreesLat(geo.latitude),
+  lon:sat.degreesLong(geo.longitude),
+  alt:geo.height
+ };
+}
+function separation(a,b){
+ return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+}
+
+// =====================================
+// SATELLITE MARKERS
+// =====================================
+function createMarkers(){
+ markers.forEach(m=>{
+  scene.remove(m);
+  m.geometry.dispose();
+  m.material.dispose();
+ });
+ markers=[];
+
+ satellites.forEach((s,i)=>{
+  const marker=new THREE.Mesh(
+   new THREE.SphereGeometry(.075,10,10),
+   new THREE.MeshBasicMaterial({
+    color:0x8da9c5,transparent:true,opacity:.5
+   })
+  );
+  marker.userData.index=i;
+  scene.add(marker);
+  markers.push(marker);
+ });
+}
+
+function updateMarkers(){
+ satellites.forEach((s,i)=>{
+  const p=fixedPosition(s.record,simulationTime);
+  const marker=markers[i];
+  const active=i===selected;
+  const selectedOnly=$("viewMode").value==="selected";
+
+  marker.visible=Boolean(p)&&(!selectedOnly||active);
+  if(p)marker.position.copy(toScene(p));
+
+  marker.scale.setScalar(active?2.5:.65);
+  marker.material.color.setHex(active?0x00ffff:0x8da9c5);
+  marker.material.opacity=active?1:.5;
+ });
+
+ updateSatelliteLabel();
+ updateStationConnection();
+}
+
+// =====================================
+// SELECTED ORBIT
+// =====================================
+function drawSelectedPath(){
+ removeLine(selectedPath);
+ selectedPath=null;
+ if(!satellites.length)return;
+ if($("viewMode").value==="dots")return;
+
+ const record=satellites[selected].record;
+ const points=[];
+
+ for(let m=-45;m<=60;m+=2){
+  const time=new Date(simulationTime.getTime()+m*60000);
+  const p=fixedPosition(record,time);
+  if(p)points.push(toScene(p));
+ }
+ if(points.length>1){
+  selectedPath=line(points,0x00eaff,.9);
+ }
+ lastPathTime=simulationTime.getTime();
+}
+
+// =====================================
+// GROUND STATION
+// =====================================
+const stationMarker=new THREE.Mesh(
+ new THREE.SphereGeometry(.075,12,12),
+ new THREE.MeshBasicMaterial({color:0x00ff88})
+);
+scene.add(stationMarker);
+
+function observer(){
+ const [lat,lon]=$("station").value.split(",").map(Number);
+ return {latitude:rad(lat),longitude:rad(lon),height:0};
+}
+function elevation(record,obs,date){
+ const p=fixedPosition(record,date);
+ if(!p)return null;
+ return deg(sat.ecfToLookAngles(obs,p).elevation);
+}
+function updateStationConnection(){
+ removeLine(connectionLine);
+ connectionLine=null;
+
+ const [lat,lon]=$("station").value.split(",").map(Number);
+ stationMarker.position.copy(globePoint(lat,lon,3.08));
+ stationMarker.visible=connectionVisible;
+
+ if(!connectionVisible||!satellites.length)return;
+
+ const marker=markers[selected];
+ if(!marker||!marker.visible)return;
+
+ const el=elevation(
+  satellites[selected].record,observer(),simulationTime
+ );
+ if(el===null||el<=0)return;
+
+ connectionLine=line([
+  stationMarker.position.clone(),
+  marker.position.clone()
+ ],0x00ff88,.95);
+}
+
+// =====================================
+// VISUALIZATION BUTTONS
+// =====================================
+$("viewMode").onchange=()=>{
+ updateMarkers();
+ drawSelectedPath();
+};
+$("toggleLabel").onclick=()=>{
+ labelVisible=!labelVisible;
+ updateSatelliteLabel();
+ $("toggleLabel").textContent=labelVisible
+  ?"Hide Satellite Name":"Show Satellite Name";
+};
+$("toggleConnection").onclick=()=>{
+ connectionVisible=!connectionVisible;
+ updateStationConnection();
+ $("toggleConnection").textContent=connectionVisible
+  ?"Hide Station Connection":"Show Station Connection";
+};
+$("focus").onclick=()=>{
+ const marker=markers[selected];
+ if(!marker||!marker.visible)return;
+ const target=marker.position.clone();
+ const outward=target.clone().normalize();
+ controls.target.copy(target);
+ camera.position.copy(
+  target.clone().addScaledVector(outward,4.5)
+ );
+ controls.update();
+};
+
+const raycaster=new THREE.Raycaster();
+const mouse=new THREE.Vector2();
+
+renderer.domElement.addEventListener("click",event=>{
+ const rect=renderer.domElement.getBoundingClientRect();
+ mouse.x=((event.clientX-rect.left)/rect.width)*2-1;
+ mouse.y=-((event.clientY-rect.top)/rect.height)*2+1;
+ raycaster.setFromCamera(mouse,camera);
+ const hits=raycaster.intersectObjects(markers);
+ if(hits.length){
+  selected=hits[0].object.userData.index;
+  $("satelliteSelect").value=String(selected);
+  onSelectionChanged();
+ }
+});
+
+function onSelectionChanged(){
+ if(!satellites.length)return;
+ setSatelliteLabel(satellites[selected].name);
+ updateMarkers();
+ drawSelectedPath();
+ updateDetails();
+}
+$("satelliteSelect").onchange=event=>{
+ selected=Number(event.target.value);
+ onSelectionChanged();
+};
+
+// =====================================
+// GROUND STATION VISIBILITY
+// =====================================
+function updateCoverage(){
+ const box=$("coverageResults");
+ box.replaceChildren();
+
+ if(!satellites.length){
+  box.textContent="Load satellites first.";
+  return;
+ }
+
+ const obs=observer();
+ const visible=[];
+
+ satellites.forEach(s=>{
+  const p=fixedPosition(s.record,simulationTime);
+  if(!p)return;
+  const look=sat.ecfToLookAngles(obs,p);
+  const el=deg(look.elevation);
+  if(el>0){
+   visible.push({
+    name:s.name,elevation:el,range:look.rangeSat
+   });
+  }
+ });
+ visible.sort((a,b)=>b.elevation-a.elevation);
+
+ const add=text=>{
+  const p=document.createElement("p");
+  p.textContent=text;
+  box.appendChild(p);
+ };
+
+ add("Tracked satellites: "+satellites.length);
+ add("Currently above horizon: "+visible.length);
+
+ if(!visible.length){
+  add("No tracked satellite is above this station's horizon right now.");
+ }
+
+ visible.slice(0,12).forEach(s=>{
+  add(
+   s.name+" | Elevation: "+s.elevation.toFixed(1)+
+   "° | Range: "+s.range.toFixed(0)+" km"
+  );
+ });
+ add("Geometric visibility only; radio reception is not measured.");
+}
+$("coverage").onclick=updateCoverage;
+
+$("station").onchange=()=>{
+ updateCoverage();
+ updateStationConnection();
+ passJob++;
+ $("nextPassResults").textContent=
+  "Station changed. Predict passes again.";
+};
+
+// =====================================
+// NEXT-PASS PREDICTION
+// =====================================
+function refineCrossing(record,obs,left,right){
+ const first=elevation(record,obs,new Date(left));
+ if(first===null)return null;
+ for(let i=0;i<18;i++){
+  const mid=Math.floor((left+right)/2);
+  const value=elevation(record,obs,new Date(mid));
+  if(value===null)return null;
+  if((first>0)===(value>0))left=mid;
+  else right=mid;
+ }
+ return new Date(Math.floor((left+right)/2));
+}
+
+function predictPass(record,obs,startDate){
+ const start=startDate.getTime();
+ const end=start+24*3600000;
+ const step=120000;
+ let previousTime=start;
+ let previous=elevation(record,obs,new Date(start));
+ let rise=previous!==null&&previous>0
+  ?new Date(start):null;
+
+ for(let t=start+step;t<=end;t+=step){
+  const current=elevation(record,obs,new Date(t));
+  if(current===null){
+   previous=null;
+   previousTime=t;
+   continue;
+  }
+  if(previous!==null){
+   if(previous<=0&&current>0){
+    rise=refineCrossing(record,obs,previousTime,t);
+   }
+   if(previous>0&&current<=0&&rise){
+    const set=refineCrossing(record,obs,previousTime,t);
+    if(set)return {rise,set};
+   }
+  }
+  previous=current;
+  previousTime=t;
+ }
+ return null;
+}
+
+async function updateNextPasses(){
+ if(!satellites.length){
+  $("nextPassResults").textContent="Load satellites first.";
+  return;
+ }
+
+ const job=++passJob;
+ const obs=observer();
+ const start=new Date(simulationTime);
+ const records=[...satellites];
+ const results=[];
+ const box=$("nextPassResults");
+ const button=$("predictPasses");
+ button.disabled=true;
+
+ try{
+  for(let i=0;i<records.length;i+=4){
+   if(job!==passJob)return;
+
+   for(const s of records.slice(i,i+4)){
+    const pass=predictPass(s.record,obs,start);
+    if(pass)results.push({name:s.name,...pass});
+   }
+
+   box.textContent="Calculating: "+
+    Math.min(i+4,records.length)+"/"+records.length;
+
+   await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  if(job!==passJob)return;
+
+  results.sort((a,b)=>a.rise-b.rise);
+  box.replaceChildren();
+
+  const add=text=>{
+   const p=document.createElement("p");
+   p.textContent=text;
+   box.appendChild(p);
+  };
+
+  if(!results.length){
+   add("No complete predicted passes found in 24 hours.");
+  }else{
+   add("Next predicted satellite passes:");
+   results.slice(0,5).forEach(p=>{
+    add(
+     p.name+" | Rise: "+p.rise.toLocaleString()+
+     " | Set: "+p.set.toLocaleString()
+    );
+   });
+  }
+  add("Times are in your device's timezone. Visibility is geometric.");
+ }finally{
+  if(job===passJob)button.disabled=false;
+ }
+}
+$("predictPasses").onclick=updateNextPasses;
+
+// =====================================
+// LOAD REAL SATELLITE RECORDS
+// =====================================
+async function loadSatellites(){
+ if(loading)return;
+ loading=true;
+ $("load").disabled=true;
+ $("status").textContent="Downloading CelesTrak records...";
+
+ try{
+  if(!sat||!sat.twoline2satrec){
+   throw new Error("Satellite library did not load.");
+  }
+
+  const urls=[
+   "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=TLE",
+   "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=TLE"
+  ];
+
+  let loaded=[];
+  let lastError=null;
+
+  for(const url of urls){
+   try{
+    const response=await fetch(url,{cache:"no-store"});
+    if(!response.ok)throw new Error("HTTP "+response.status);
+
+    const lines=(await response.text())
+     .split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+
+    const candidates=[];
+
+    for(let i=0;i<lines.length;){
+     let name="",a="",b="";
+
+     if(lines[i].startsWith("1 ")&&
+        lines[i+1]?.startsWith("2 ")){
+      a=lines[i];
+      b=lines[i+1];
+      name="Satellite "+a.slice(2,7).trim();
+      i+=2;
+     }else if(lines[i+1]?.startsWith("1 ")&&
+              lines[i+2]?.startsWith("2 ")){
+      name=lines[i].replace(/^0 /,"");
+      a=lines[i+1];
+      b=lines[i+2];
+      i+=3;
+     }else{
+      i++;
+      continue;
+     }
+
+     const record=sat.twoline2satrec(a,b);
+     if(!eciPosition(record,new Date()))continue;
+
+     const yy=Number(a.slice(18,20));
+     const year=yy<57?2000+yy:1900+yy;
+     const day=Number(a.slice(20,32));
+     const epoch=new Date(
+      Date.UTC(year,0,1)+(day-1)*86400000
+     );
+
+     candidates.push({
+      name,
+      id:a.slice(2,7).trim(),
+      record,
+      epoch
+     });
+
+     if(candidates.length>=100)break;
+    }
+
+    if(candidates.length>=2){
+     loaded=candidates;
+     break;
+    }
+   }catch(error){
+    lastError=error;
+    console.warn(error);
+   }
+  }
+
+  if(loaded.length<2){
+   throw lastError||new Error("No valid satellite records.");
+  }
+
+  const previousId=satellites[selected]?.id;
+  satellites=loaded;
+  selected=Math.max(
+   0,
+   satellites.findIndex(s=>s.id===previousId)
+  );
+  fetchedAt=new Date();
+
+  const dropdown=$("satelliteSelect");
+  dropdown.replaceChildren();
+
+  satellites.forEach((s,i)=>{
+   const option=document.createElement("option");
+   option.value=i;
+   option.textContent=s.name;
+   dropdown.appendChild(option);
+  });
+
+  dropdown.value=String(selected);
+  createMarkers();
+  onSelectionChanged();
+  updateCoverage();
+
+  passJob++;
+  $("nextPassResults").textContent=
+   "Records refreshed. Predict passes again.";
+
+  $("status").textContent=
+   "Tracking "+satellites.length+
+   " satellites using real orbital records.";
+  $("status").className="good";
+
+ }catch(error){
+  $("status").textContent=
+   "Satellite loading failed: "+error.message;
+  $("status").className="bad";
+  console.error(error);
+ }finally{
+  loading=false;
+  $("load").disabled=false;
+ }
+}
+$("load").onclick=loadSatellites;
+setInterval(loadSatellites,30*60*1000);
+
+// =====================================
+// SELECTED SATELLITE DETAILS
+// =====================================
+function updateDetails(){
+ if(!satellites.length)return;
+ const s=satellites[selected];
+ const p=coordinates(s.record,simulationTime);
+ if(!p)return;
+
+ const box=$("satelliteInfo");
+ box.replaceChildren();
+
+ const rows=[
+  ["Name",s.name],
+  ["NORAD ID",s.id],
+  ["Latitude",p.lat.toFixed(4)+"°"],
+  ["Longitude",p.lon.toFixed(4)+"°"],
+  ["Altitude",p.alt.toFixed(2)+" km"],
+  ["Record epoch",s.epoch.toUTCString()],
+  ["Record age",((simulationTime-s.epoch)/86400000).toFixed(2)+" days"],
+  ["Position type","SGP4 prediction, not live telemetry"]
+ ];
+
+ rows.forEach(([label,value])=>{
+  const p=document.createElement("p");
+  const b=document.createElement("b");
+  b.textContent=label+": ";
+  p.append(b,document.createTextNode(value));
+  box.appendChild(p);
+ });
+}
+
+// =====================================
+// NEW QUANTIFIER EXPLANATION DASHBOARD
+// =====================================
+$("analyze").onclick=()=>{
+ const box=$("results");
+ box.replaceChildren();
+
+ if(satellites.length<2){
+  box.textContent="Load at least two satellites first.";
+  return;
+ }
+
+ const threshold=Number($("threshold").value);
+ if(!Number.isFinite(threshold)||threshold<=0){
+  box.textContent="Enter a positive distance threshold.";
+  return;
+ }
+
+ const positions=satellites.map(s=>({
+  name:s.name,
+  id:s.id,
+  p:eciPosition(s.record,simulationTime)
+ })).filter(s=>s.p);
+
+ if(positions.length<2){
+  box.textContent="Not enough valid satellite positions.";
+  return;
+ }
+
+ const closePairs=[];
+ const neighbors=Array(positions.length).fill(0);
+ let closest=null;
+
+ for(let i=0;i<positions.length;i++){
+  for(let j=i+1;j<positions.length;j++){
+   const d=separation(positions[i].p,positions[j].p);
+   const pair={
+    first:positions[i],
+    second:positions[j],
+    distance:d
+   };
+
+   if(!closest||d<closest.distance)closest=pair;
+
+   if(d<threshold){
+    closePairs.push(pair);
+    neighbors[i]++;
+    neighbors[j]++;
+   }
+  }
+ }
+
+ const universal=closePairs.length===0;
+ const existential=closePairs.length>0;
+ const nested=neighbors.every(n=>n>0);
+ const isolatedIndex=neighbors.findIndex(n=>n===0);
+ const totalPairs=positions.length*(positions.length-1)/2;
+
+ $("quantifierCount").textContent=positions.length;
+ $("quantifierTotalPairs").textContent=totalPairs;
+ $("quantifierPairs").textContent=closePairs.length;
+
+ function text(parent,message,tag="p",className=""){
+  const element=document.createElement(tag);
+  element.textContent=message;
+  if(className)element.className=className;
+  parent.appendChild(element);
+  return element;
+ }
+
+ function card(title,formula,meaning,result){
+  const container=document.createElement("div");
+  container.className="quant-card";
+
+  text(container,title,"h3");
+  text(container,formula,"p","quant-formula");
+  text(container,meaning);
+
+  text(
+   container,
+   result?"TRUE ✓":"FALSE ✗",
+   "p",
+   "quant-result "+(result?"quant-true":"quant-false")
+  );
+
+  box.appendChild(container);
+  return container;
+ }
+
+ function describe(pair){
+  return pair.first.name+" (NORAD "+pair.first.id+") and "+
+   pair.second.name+" (NORAD "+pair.second.id+") are "+
+   pair.distance.toFixed(2)+" km apart.";
+ }
+
+ text(box,"Analysis Summary","h3");
+ text(box,"Simulation time: "+simulationTime.toUTCString());
+ text(box,"Satellites analyzed: "+positions.length);
+ text(box,"Distinct pairs examined: "+totalPairs);
+ text(box,"Distance threshold: "+threshold+" km");
+ text(box,"Pairs closer than threshold: "+closePairs.length);
+
+ const universalCard=card(
+  "1. ∀ Universal Quantifier",
+  "∀x ∀y, x ≠ y → d(x,y) ≥ "+threshold+" km",
+  "Every pair of different tracked satellites must be at least "+
+   threshold+" km apart.",
+  universal
+ );
+
+ if(universal){
+  text(universalCard,
+   "All examined satellite pairs satisfy the condition.",
+   "p","quant-example"
+  );
+  if(closest){
+   text(universalCard,
+    "Closest pair: "+describe(closest)
+   );
+  }
+ }else{
+  text(universalCard,
+   "Counterexample: "+describe(closePairs[0])+
+   " This single pair makes the universal statement false.",
+   "p","quant-example"
+  );
+ }
+
+ const existentialCard=card(
+  "2. ∃ Existential Quantifier",
+  "∃x ∃y, x ≠ y ∧ d(x,y) < "+threshold+" km",
+  "At least one pair of different tracked satellites is closer "+
+   "than "+threshold+" km.",
+  existential
+ );
+
+ if(existential){
+  text(existentialCard,
+   "Witness: "+describe(closePairs[0])+
+   " This pair proves the existential statement.",
+   "p","quant-example"
+  );
+ }else{
+  text(existentialCard,
+   "No qualifying pair exists in the tracked set.",
+   "p","quant-example"
+  );
+  if(closest){
+   text(existentialCard,
+    "Closest pair: "+describe(closest)
+   );
+  }
+ }
+
+ const nestedCard=card(
+  "3. ∀∃ Nested Quantifiers",
+  "∀x ∃y, x ≠ y ∧ d(x,y) < "+threshold+" km",
+  "For every tracked satellite, there must be another "+
+   "different tracked satellite within "+threshold+" km.",
+  nested
+ );
+
+ if(nested){
+  text(nestedCard,
+   "Every tracked satellite has at least one qualifying neighbor.",
+   "p","quant-example"
+  );
+ }else{
+  const isolated=positions[isolatedIndex];
+  text(nestedCard,
+   "Counterexample: "+isolated.name+
+   " (NORAD "+isolated.id+") has no other tracked satellite "+
+   "within "+threshold+" km.",
+   "p","quant-example"
+  );
+ }
+
+ text(nestedCard,
+  "Satellites with a qualifying neighbor: "+
+  neighbors.filter(n=>n>0).length+
+  " out of "+positions.length
+ );
+
+ text(box,"4. Real Satellite Examples","h3");
+
+ if(!closePairs.length){
+  text(box,"No close pairs were found at this threshold.");
+ }else{
+  closePairs.sort((a,b)=>a.distance-b.distance);
+  text(box,"Closest qualifying pairs:");
+
+  closePairs.slice(0,10).forEach((pair,i)=>{
+   text(box,(i+1)+". "+describe(pair));
+  });
+ }
+
+ text(box,"5. Mathematical Conclusion","h3");
+
+ text(box,
+  "A universal statement requires every relevant case "+
+  "to satisfy its condition. One counterexample makes it false."
+ );
+
+ text(box,
+  "An existential statement is true when at least one "+
+  "valid example, called a witness, exists."
+ );
+
+ text(box,
+  "A nested statement such as ∀x∃y requires a qualifying "+
+  "witness for every possible value of x."
+ );
+
+ text(box,
+  "These results apply only to the tracked satellite set "+
+  "at the displayed simulation time. Satellite proximity "+
+  "alone does not indicate collision risk."
+ );
+};
+
+// =====================================
+// SOLAR ENERGY
+// =====================================
+const SOLAR=1361;
+const ALBEDO=.30;
+const earthRadiusM=6371000;
+const incomingPower=SOLAR*Math.PI*earthRadiusM**2;
+const absorbedPower=incomingPower*(1-ALBEDO);
+const averageFlux=absorbedPower/(4*Math.PI*earthRadiusM**2);
+
+$("globalPower").textContent=
+ (absorbedPower/1e15).toFixed(2)+" PW";
+$("averageFlux").textContent=
+ averageFlux.toFixed(2)+" W/m²";
+
+function localSolar(lat,lon,date){
+ const sun=getSun(date);
+ const cosZenith=
+  Math.sin(rad(lat))*Math.sin(rad(sun.lat))+
+  Math.cos(rad(lat))*Math.cos(rad(sun.lat))*
+  Math.cos(rad(lon-sun.lon));
+
+ const incoming=SOLAR*Math.max(0,cosZenith);
+ return {
+  incoming,
+  absorbed:incoming*(1-ALBEDO),
+  daylight:cosZenith>0
+ };
+}
+
+function updateSolar(){
+ const sun=getSun(simulationTime);
+ $("subsolar").textContent=
+  sun.lat.toFixed(1)+"°, "+sun.lon.toFixed(1)+"°";
+
+ const [lat,lon]=$("solarLocation").value
+  .split(",").map(Number);
+ const result=localSolar(lat,lon,simulationTime);
+ const box=$("solarResults");
+ box.replaceChildren();
+
+ const rows=[
+  ["Simulation time",simulationTime.toUTCString()],
+  ["Daylight",result.daylight?"Yes":"No"],
+  ["Incoming solar irradiance",result.incoming.toFixed(2)+" W/m²"],
+  ["Illustrative absorbed irradiance",result.absorbed.toFixed(2)+" W/m²"]
+ ];
+
+ rows.forEach(([label,value])=>{
+  const p=document.createElement("p");
+  const b=document.createElement("b");
+  b.textContent=label+": ";
+  p.append(b,document.createTextNode(value));
+  box.appendChild(p);
+ });
+
+ const note=document.createElement("small");
+ note.textContent=
+  "Simplified top-of-atmosphere model, not measured surface heat.";
+ box.appendChild(note);
+}
+$("solarCheck").onclick=updateSolar;
+$("solarLocation").onchange=updateSolar;
+
+// =====================================
+// SOLAR QUANTIFIERS
+// =====================================
+$("solarAnalyze").onclick=()=>{
+ const threshold=Number($("solarThreshold").value);
+ if(!Number.isFinite(threshold)||threshold<0){
+  $("solarQuantifiers").textContent=
+   "Enter a non-negative threshold.";
+  return;
+ }
+
+ const values=[];
+ for(let lat=-75;lat<=75;lat+=15){
+  for(let lon=-180;lon<180;lon+=15){
+   values.push(localSolar(lat,lon,simulationTime).incoming);
+  }
+ }
+
+ const box=$("solarQuantifiers");
+ box.replaceChildren();
+
+ const statements=[
+  "Sampled locations: "+values.length,
+  "∀ Every sampled location exceeds "+threshold+
+   " W/m²: "+values.every(v=>v>threshold),
+  "∃ Some location exceeds "+threshold+
+   " W/m²: "+values.some(v=>v>threshold),
+  "∃ Some location receives no direct sunlight: "+
+   values.some(v=>v===0),
+  "Locations above threshold: "+
+   values.filter(v=>v>threshold).length
+ ];
+
+ statements.forEach(message=>{
+  const p=document.createElement("p");
+  p.textContent=message;
+  box.appendChild(p);
+ });
+};
+
+// =====================================
+// TIME CONTROLS
+// =====================================
+function updateMode(){
+ $("mode").textContent=paused
+  ?"Mode: Paused"
+  :speed===1
+   ?"Mode: Current-time SGP4 prediction"
+   :"Mode: "+speed+"× accelerated simulation";
+}
+
+$("sync").onclick=()=>{
+ simulationTime=new Date();
+ speed=1;
+ paused=false;
+ $("speed").value="1";
+ $("pause").textContent="Pause";
+ updateMode();
+ updateSun();
+ if(satellites.length){
+  updateMarkers();
+  drawSelectedPath();
+  updateCoverage();
+ }
+};
+
+$("pause").onclick=()=>{
+ paused=!paused;
+ $("pause").textContent=paused?"Resume":"Pause";
+ updateMode();
+};
+
+$("speed").onchange=e=>{
+ speed=Number(e.target.value);
+ simulationTime=new Date();
+ updateMode();
+ if(satellites.length)drawSelectedPath();
+};
+
+// =====================================
+// ANIMATION
+// =====================================
+function animate(now){
+ requestAnimationFrame(animate);
+
+ const dt=Math.min(
+  Math.max((now-lastFrame)/1000,0),.2
+ );
+ lastFrame=now;
+
+ if(!paused){
+  if(speed===1){
+   simulationTime=new Date();
+  }else{
+   simulationTime=new Date(
+    simulationTime.getTime()+dt*speed*1000
+   );
+  }
+
+  updateSun();
+
+  if(satellites.length){
+   updateMarkers();
+   if(Math.abs(
+    simulationTime.getTime()-lastPathTime
+   )>5*60*1000){
+    drawSelectedPath();
+   }
+  }
+ }
+
+ if(now-lastUI>1000){
+  $("clock").textContent=
+   "Simulation time (UTC): "+simulationTime.toUTCString();
+
+  if(fetchedAt){
+   $("dataAge").textContent=
+    "Records downloaded: "+fetchedAt.toLocaleString();
+  }
+
+  if(satellites.length){
+   updateDetails();
+
+   if(now-lastCoverage>10000){
+    updateCoverage();
+    lastCoverage=now;
+   }
+  }
+
+  updateSolar();
+  lastUI=now;
+ }
+
+ controls.update();
+ renderer.render(scene,camera);
+}
+
+window.addEventListener("resize",()=>{
+ camera.aspect=host.clientWidth/host.clientHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(host.clientWidth,host.clientHeight);
+});
+
+// =====================================
+// START APPLICATION
+// =====================================
+updateSun();
+updateMode();
+updateSolar();
+requestAnimationFrame(animate);
+
+if(!sat){
+ $("status").textContent=
+  "Satellite library failed to load. Check internet.";
+ $("status").className="bad";
+}else{
+ loadSatellites();
+}
+</script>
+</body>
+</html>
